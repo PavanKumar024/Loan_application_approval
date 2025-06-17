@@ -1,4 +1,4 @@
-# app.py  —  3‑page Streamlit interface
+# app.py  —  4‑page Streamlit interface
 # -------------------------------------
 import streamlit as st
 import pandas as pd
@@ -7,6 +7,7 @@ import joblib
 from pathlib import Path
 import plotly.express as px
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.set_page_config(page_title="Loan Application Approval Predictor",
                    layout="wide",
@@ -54,15 +55,16 @@ def preprocess(user_dict, scaler):
     X[NUM_COLS] = scaler.transform(X[NUM_COLS])
     return X
 
-def make_applicant_form(sidebar):
-    c1, c2 = sidebar.columns(2)
+def applicant_form(container):
+    """Render the applicant input widgets inside *container* (main page)."""
+    c1, c2 = container.columns(2)
     ui = dict(
-        loan_amount_requested = c1.number_input("Loan Amount (₹)", 10000, 10000000, 250000, 10000),
+        loan_amount_requested = c1.number_input("Loan Amount (₹)", 10000, 1_00_00_000, 2_50_000, 10_000),
         loan_tenure_months    = c2.number_input("Tenure (months)", 6, 360, 60, 6),
         interest_rate_offered = c1.number_input("Interest Rate (%)", 5.0, 30.0, 11.5, 0.1),
-        monthly_income        = c2.number_input("Monthly Income (₹)", 5000, 1000000, 90000, 1000),
+        monthly_income        = c2.number_input("Monthly Income (₹)", 5_000, 10_00_000, 90_000, 1_000),
         cibil_score           = c1.number_input("CIBIL Score", 300, 900, 740, 1),
-        existing_emis_monthly = c2.number_input("Existing EMIs (₹)", 0, 500000, 5000, 1000),
+        existing_emis_monthly = c2.number_input("Existing EMIs (₹)", 0, 5_00_000, 5_000, 1_000),
         debt_to_income_ratio  = c1.number_input("Debt‑to‑Income Ratio", 0.0, 1.0, 0.25, 0.01),
         applicant_age         = c2.number_input("Applicant Age", 18, 80, 29, 1),
         number_of_dependents  = c1.number_input("Dependents", 0, 10, 2, 1),
@@ -76,41 +78,50 @@ def make_applicant_form(sidebar):
     return ui
 
 # ---------------- Sidebar navigation -----------------------
-st.sidebar.title("⇦ Navigation")
+st.sidebar.title("🧭 Navigation")
 page = st.sidebar.radio(
-    "Select a section:",
-    ["Dataset", "Visualizations", "Model Selection & Prediction"]
+    "Go to",
+    ("🏠 Home", "📁 Dataset", "📊 Visualizations", "🧠 Predictor")
 )
 
-# ================== 1️⃣  DATASET PAGE ======================
-if page == "Dataset":
-    st.header("📄 Dataset Preview (first 100 rows)")
-    st.dataframe(df.head(100), use_container_width=True)
+# ====================== 🏠 HOME =============================
+if page == "🏠 Home":
+    st.title("Loan Application Approval Predictor")
+    st.header("Welcome to the Loan Application Approval Predictor App")
+    st.markdown(
+        """
+        ### 🔍 What this app offers
+        * **View** the dataset used to train the model  
+        * **Explore** visual insights such as approval rates and distributions  
+        * **Predict** loan approval using:  
+          * 🌲 Random Forest  
+          * 📈 Logistic Regression
+        ---
+        Select a page on the left to get started ▶️
+        """
+    )
+    st.markdown("---")
+    st.markdown("👨‍💻 Developed by: **M.Pavan Kumar**")
 
-# ================= 2️⃣  VISUALIZATIONS PAGE ================
-elif page == "Visualizations":
+# ================== 📁 DATASET PAGE ========================
+elif page == "📁 Dataset":
+    st.header("📄 Dataset Preview ")
+    st.dataframe(df.head(300), use_container_width=True)
+
+# ================= 📊 VISUALIZATIONS PAGE =================
+elif page == "📊 Visualizations":
     st.header("📊 Quick Visualizations")
 
     # Loan Status Distribution
-    status_counts = (
-        df["loan_status"]
-          .value_counts()
-          .reset_index(name="count")
-    )
-
-    fig1 = px.bar(
-        status_counts,
-        x="loan_status",
-        y="count",
-        labels={"loan_status": "Loan Status", "count": "Count"},
-        color_discrete_sequence=["royalblue"],
-        title="Loan Status Distribution"
-    )
+    status_counts = df["loan_status"].value_counts().reset_index(name="count")
+    fig1 = px.bar(status_counts, x="loan_status", y="count",
+                  labels={"loan_status": "Loan Status", "count": "Count"},
+                  color_discrete_sequence=["royalblue"],
+                  title="Loan Status Distribution")
     st.plotly_chart(fig1, use_container_width=True)
 
-    # Loan Type vs Approval % (Plotly Grouped Bar)
-    st.subheader("📊 Approval Rate by Loan Type")
-
+    # Approval % by Loan Type
+    st.subheader("Approval % by Loan Type")
     plot_df = (
         df.groupby("loan_type")["loan_status"]
           .value_counts(normalize=True)
@@ -118,62 +129,44 @@ elif page == "Visualizations":
           .rename("percentage")
           .reset_index()
     )
-
-    fig3 = px.bar(
-        plot_df,
-        x="loan_type",
-        y="percentage",
-        color="loan_status",
-        barmode="group",
-        title="Approval % by Loan Type",
-        labels={"percentage": "Approval Rate (%)", "loan_type": "Loan Type"}
-    )
-
-    st.plotly_chart(fig3, use_container_width=True)
-
-
-    # Correlation heatmap (numeric)
-    st.subheader("Correlation Heatmap (Numeric Features)")
-    corr = df[NUM_COLS].corr()
-    fig2 = px.imshow(corr, text_auto=".2f", aspect="auto", color_continuous_scale="RdBu")
+    fig2 = px.bar(plot_df, x="loan_type", y="percentage",
+                  color="loan_status", barmode="group",
+                  labels={"percentage": "Approval Rate (%)", "loan_type": "Loan Type"})
     st.plotly_chart(fig2, use_container_width=True)
 
-    
+    # Correlation heatmap
+    st.subheader("Correlation Heatmap (Numeric Features)")
+    corr = df[NUM_COLS].corr()
+    fig3 = px.imshow(corr, text_auto=".2f", aspect="auto",
+                     color_continuous_scale="RdBu")
+    st.plotly_chart(fig3, use_container_width=True)
 
-    import seaborn as sns
-
-    # Additional: Hist + Boxplot for each numeric column
-    st.subheader("📈 Distribution & Boxplot of Numeric Features")
+    # Hist & Boxplot for each numeric feature
+    st.subheader("Distribution & Boxplot of Numeric Features")
     for col in NUM_COLS:
         st.markdown(f"**{col.replace('_', ' ').title()}**")
-
         fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-
         sns.histplot(df[col], kde=True, ax=axs[0], color="skyblue", edgecolor="black")
-        axs[0].set_title(f"Distribution of {col}")
-
+        axs[0].set_title("Distribution")
         sns.boxplot(y=df[col], ax=axs[1], color="lightcoral")
-        axs[1].set_title(f"Boxplot of {col}")
-
+        axs[1].set_title("Boxplot")
         plt.tight_layout()
         st.pyplot(fig)
 
-
-# ============= 3️⃣  MODEL SELECTION & PREDICTION ===========
+# ============= 🧠 MODEL SELECTION & PREDICTION =============
 else:
     st.header("🏦 Loan Application Approval Predictor")
 
-    # --- Model chooser ---
-    model_choice = st.sidebar.selectbox("🧠 Choose model", list(MODEL_MAP.keys()))
+    # --- Model chooser in sidebar ---
+    model_choice = st.sidebar.selectbox("Choose model", list(MODEL_MAP.keys()))
     model, scaler = load_model_and_scaler(model_choice)
 
-    # --- Applicant form ---
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Applicant Details")
-    user_dict = make_applicant_form(st.sidebar)
+    # --- Applicant form in CENTER ---
+    st.subheader("✍️ Enter Applicant Details")
+    user_dict = applicant_form(st)   # main page container
 
     # --- Predict button ---
-    if st.sidebar.button("Predict"):
+    if st.button("🚀 Predict"):
         X_ready = preprocess(user_dict, scaler)
         prob = model.predict_proba(X_ready)[0, 1]
         pred = model.predict(X_ready)[0]
@@ -183,10 +176,9 @@ else:
             st.success(f"✅ Approved  (probability {prob:.1%})")
         else:
             st.error(f"❌ Rejected  (probability {prob:.1%})")
-
         st.progress(min(int(prob*100), 100))
 
         with st.expander("See entered details"):
             st.json(user_dict)
     else:
-        st.info("Fill in the details on the left and press **Predict**.")
+        st.info("Fill the form above and click **Predict**.")
